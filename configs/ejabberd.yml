@@ -69,6 +69,10 @@ log_rate_limit: 100
 ##
 ## net_ticktime: 60
 
+certfiles:
+  - "/opt/ejabberd/ssl/host.pem"
+  - "/opt/ejabberd/ssl/localhost.pem"
+
 ###.  ================
 ###'  SERVED HOSTNAMES
 
@@ -81,7 +85,7 @@ log_rate_limit: 100
 ##   - "example.org"
 ##
 hosts:
-  - "jabber.local"
+  - "localhost"
 
 ##
 ## route_subdomains: Delegate subdomains to other XMPP servers.
@@ -95,10 +99,12 @@ hosts:
 
 ## Define common macros used by listeners
 define_macro:
-  'CERTFILE': "/etc/ejabberd/ejabberd.pem"
+  'TLS_CIPHERS': "HIGH:!aNULL:!eNULL:!3DES:@STRENGTH"
+  # 'CERTFILE': "/etc/ejabberd/ejabberd.pem"
 ##  'CIPHERS': "ECDH:DH:!3DES:!aNULL:!eNULL:!MEDIUM@STRENGTH"
   'TLSOPTS':
-    - "no_sslv3"
+    # - "no_sslv3"
+    - "no_sslv2"
     - "no_tlsv1"
     - "cipher_server_preference"
     - "no_compression"
@@ -108,20 +114,29 @@ define_macro:
 ## listen: The ports ejabberd will listen on, which service each is handled
 ## by and what options to start it with.
 ##
+
+c2s_ciphers: 'TLS_CIPHERS'
+s2s_ciphers: 'TLS_CIPHERS'
+
 listen:
   -
     port: 5222
     ip: "::"
     module: ejabberd_c2s
     starttls_required: true
-    certfile: 'CERTFILE'
-    protocol_options: 'TLSOPTS'
+    # certfile: 'CERTFILE'
+    protocol_options:
+      - "no_sslv2"
+        # - "no_sslv3"
+      - "no_tlsv1"
+        #- "no_tlsv1_3" 
     ## dhfile: 'DHFILE'
     ## ciphers: 'CIPHERS'
     max_stanza_size: 65536
     shaper: c2s_shaper
     access: c2s
     resend_on_timeout: if_offline
+    starttls: true
   -
     port: 5269
     ip: "::"
@@ -139,7 +154,7 @@ listen:
     ## register: true
     ## captcha: true
     tls: false
-    certfile: 'CERTFILE'
+    # certfile: 'CERTFILE'
     protocol_options: 'TLSOPTS'
   ##
   ## ejabberd_service: Interact with external components (transports, ...)
@@ -215,11 +230,11 @@ s2s_use_starttls: required
 ##
 ## s2s_certfile: Specify a certificate file.
 ##
-s2s_certfile: 'CERTFILE'
+# s2s_certfile: 'CERTFILE'
 
 ## Custom OpenSSL options
 ##
-s2s_protocol_options: 'TLSOPTS'
+# s2s_protocol_options: 'TLSOPTS'
 
 ##
 ## domain_certfile: Specify a different certificate for each served hostname.
@@ -439,7 +454,8 @@ acl:
   ##
   admin:
      user:
-       - "admin@jabber.local"
+      - "admin": "jabber.local"
+      - "admin": "localhost"
 
   ##
   ## Blocked users
@@ -539,7 +555,7 @@ access_rules:
     - allow
   ## Only allow to register from localhost
   trusted_network:
-    - allow: loopback
+    - allow: all
   ## Do not establish S2S connections with bad servers
   ## If you enable this you also have to uncomment "s2s_access: s2s"
   ## s2s:
@@ -568,6 +584,9 @@ access_rules:
 ## of default one.
 ##
 api_permissions:
+  "local commands":
+    who:
+      - all
   "console commands":
     from:
       - ejabberd_ctl
@@ -577,11 +596,13 @@ api_permissions:
     who:
       - access:
         - allow:
+          - ip: "127.0.0.1/8"
           - acl: admin
       - oauth:
         - scope: "ejabberd:admin"
         - access:
           - allow:
+            - acl: loopback
             - acl: admin
     what:
       - "*"
@@ -589,9 +610,10 @@ api_permissions:
       - "!start"
   "public commands":
     who:
-      - ip: "127.0.0.1/8"
+      - acl: loopback
     what:
       - "status"
+      - "register"
       - "connected_users_number"
 
 ## By default the frequency of account registrations from the same IP
@@ -662,7 +684,7 @@ modules:
   ## mod_delegation: {} # for xep0356
   mod_disco: {}
   mod_echo: {}
-  mod_irc: {}
+  # mod_irc: {}
   mod_bosh: {}
   ## mod_http_fileserver:
   ##   docroot: "/var/www"
@@ -679,8 +701,7 @@ modules:
   ## limited to 2GB which might be exceeded on large servers
   ## mod_mam: {} # for xep0313, mnesia is limited to 2GB, better use an SQL backend
   mod_mam:
-    request_activates_archiving: false
-    iqdisc: one_queue
+    request_activates_archiving: true
     default: always
     db_type: sql
   mod_muc:
@@ -692,10 +713,10 @@ modules:
     access_create: muc_create
     access_persistent: muc_create
     ## Rooms should be persistent by default
-    default_room_options:
-      allow_subscription: true
-      persistent: true
-      mam: true
+    # default_room_options:
+    #   allow_subscription: true
+    #   persistent: true
+    #   mam: true
   mod_muc_admin: {}
   ## mod_muc_log: {}
   ## mod_multicast: {}
@@ -721,7 +742,7 @@ modules:
       - "pep" # pep requires mod_caps
   mod_push: {}
   mod_push_keepalive: {}
-  ## mod_register:
+  mod_register:
     ##
     ## Protect In-Band account registrations with CAPTCHA.
     ##
@@ -753,7 +774,7 @@ modules:
     ## Local c2s or remote s2s users cannot register accounts
     ##
     ##   access_from: deny
-    ##   access: register
+      access: all
   mod_roster:
     versioning: true
   mod_shared_roster: {}
@@ -761,6 +782,7 @@ modules:
   mod_time: {}
   mod_vcard:
     search: false
+  mod_vcard_xupdate: {}
   mod_version: {}
   mod_stream_mgmt: {}
   ##   Non-SASL Authentication (XEP-0078) is now disabled by default

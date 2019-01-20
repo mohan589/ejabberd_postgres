@@ -13,7 +13,7 @@ services:
       MDNS_HOSTNAME: host.docker.internal
 
   jabber:
-    image: hausgold/ejabberd:17.11
+    image: rroemhild/ejabberd
     network_mode: bridge
     ports: ["4560:4560", "5222:5222", "5269:5269", "5280:5280", "5443:5443"]
     volumes:
@@ -21,4 +21,4 @@ services:
     links:
       - db
     environment:
-      MDNS_HOSTNAME: jabber.local
+      MDNS_HOSTNAME: localhost
