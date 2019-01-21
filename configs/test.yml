@@ -501,6 +501,8 @@ acl:
       - "127.0.0.0/8"
       - "::1/128"
       - "::FFFF:172.17.0.1/128"
+      # - "::FFFF:27.0.0.1/128" should be enabled to accept from localhost, for now we are accpeting from docker
+      # so it is 172.17.0.1
 
   ##
   ## Bad XMPP servers
