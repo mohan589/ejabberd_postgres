@@ -41,8 +41,9 @@ loglevel: 5
 ##
 ## rotation: Disable ejabberd's internal log rotation, as the Debian package
 ## uses logrotate(8).
-log_rotate_size: 0
+log_rotate_size: 10485760
 log_rotate_date: ""
+log_rotate_count: 1
 
 ##
 ## overload protection: If you want to limit the number of messages per second
@@ -138,6 +139,24 @@ listen:
     resend_on_timeout: if_offline
     starttls: true
   -
+    port: 5443
+    ip: "127.0.0.1"
+    module: ejabberd_http
+    request_handlers:
+      "/api": mod_http_api
+      "/bosh": mod_bosh
+      "/upload": mod_http_upload
+      "/ws": ejabberd_http_ws
+    web_admin: true
+    captcha: true
+    ciphers: TLS_CIPHERS
+    protocol_options: TLSOPTS
+    tls: false
+  -
+    port: 4560
+    module: ejabberd_xmlrpc
+    access_commands: {}  
+  -
     port: 5269
     ip: "::"
     module: ejabberd_s2s_in
@@ -149,11 +168,11 @@ listen:
       "/ws": ejabberd_http_ws
       "/bosh": mod_bosh
       "/api": mod_http_api
-    ##  "/pub/archive": mod_http_fileserver
+      "/oauth": ejabberd_oauth
+      "/pub/archive": mod_http_fileserver
     web_admin: true
-    ## register: true
+    # register: true
     ## captcha: true
-    tls: false
     # certfile: 'CERTFILE'
     protocol_options: 'TLSOPTS'
   ##
@@ -490,7 +509,7 @@ acl:
     ip:
       - "127.0.0.0/8"
       - "::1/128"
-      - "::FFFF:127.0.0.1/128"
+      - "::FFFF:172.17.0.1/128"
 
   ##
   ## Bad XMPP servers
@@ -584,9 +603,6 @@ access_rules:
 ## of default one.
 ##
 api_permissions:
-  "local commands":
-    who:
-      - all
   "console commands":
     from:
       - ejabberd_ctl
@@ -595,9 +611,9 @@ api_permissions:
   "admin access":
     who:
       - access:
-        - allow:
-          - ip: "127.0.0.1/8"
-          - acl: admin
+          - allow:
+            - acl: loopback
+            - acl: admin
       - oauth:
         - scope: "ejabberd:admin"
         - access:
@@ -612,9 +628,7 @@ api_permissions:
     who:
       - acl: loopback
     what:
-      - "status"
-      - "register"
-      - "connected_users_number"
+      - "*"
 
 ## By default the frequency of account registrations from the same IP
 ## is limited to 1 account every 10 minutes. To disable, specify: infinity
@@ -701,7 +715,8 @@ modules:
   ## limited to 2GB which might be exceeded on large servers
   ## mod_mam: {} # for xep0313, mnesia is limited to 2GB, better use an SQL backend
   mod_mam:
-    request_activates_archiving: true
+    # request_activates_archiving: true
+    assume_mam_usage: true
     default: always
     db_type: sql
   mod_muc:
@@ -713,10 +728,10 @@ modules:
     access_create: muc_create
     access_persistent: muc_create
     ## Rooms should be persistent by default
-    # default_room_options:
+    default_room_options:
     #   allow_subscription: true
     #   persistent: true
-    #   mam: true
+      mam: true
   mod_muc_admin: {}
   ## mod_muc_log: {}
   ## mod_multicast: {}
@@ -728,18 +743,22 @@ modules:
   ##   interval: 60
   mod_privacy: {}
   mod_private: {}
-  ## mod_proxy65: {}
+  mod_proxy65:
+    access: local
+    max_connections: 5
   mod_pubsub:
     access_createnode: pubsub_createnode
-    ## reduces resource comsumption, but XEP incompliant
-    ignore_pep_from_offline: true
-    ## XEP compliant, but increases resource comsumption
-    ## ignore_pep_from_offline: false
-    last_item_cache: false
     plugins:
       - "flat"
-      - "hometree"
-      - "pep" # pep requires mod_caps
+      - "pep"
+    force_node_config:
+      ## Change from "whitelist" to "open" to enable OMEMO support
+      ## See https://github.com/processone/ejabberd/issues/2425
+      "eu.siacs.conversations.axolotl.*":
+        access_model: whitelist
+      ## Avoid buggy clients to make their bookmarks public
+      "storage:bookmarks":
+        access_model: whitelist
   mod_push: {}
   mod_push_keepalive: {}
   mod_register:
@@ -769,7 +788,7 @@ modules:
     ##
     ## Only clients in the server machine can register accounts
     ##
-    ##   ip_access: trusted_network
+      ip_access: trusted_network
     ##
     ## Local c2s or remote s2s users cannot register accounts
     ##
@@ -780,11 +799,12 @@ modules:
   mod_shared_roster: {}
   mod_stats: {}
   mod_time: {}
-  mod_vcard:
-    search: false
+  mod_vcard: {}
   mod_vcard_xupdate: {}
-  mod_version: {}
-  mod_stream_mgmt: {}
+  mod_version:
+    show_os: false
+  mod_stream_mgmt:
+    resend_on_timeout: if_offline
   ##   Non-SASL Authentication (XEP-0078) is now disabled by default
   ##   because it's obsoleted and is used mostly by abandoned
   ##   client software
@@ -795,6 +815,7 @@ modules:
   ##   PKIX authentication. Make sure you have proper certificates installed
   ##   and check your accessibility at https://xmpp.net/
   mod_s2s_dialback: {}
+  mod_fail2ban: {}
   mod_http_api: {}
 
 ##
